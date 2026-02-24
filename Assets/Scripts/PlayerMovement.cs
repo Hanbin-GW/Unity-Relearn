@@ -5,8 +5,8 @@ using UnityEngine.InputSystem;
 public class PlayerMovement : MonoBehaviour
 {
     [Header("Movement Settings")]
-    [field: SerializeField]
-    public float MoveSpeed { set; get; } = 5f;
+    [field: SerializeField] public float MoveSpeed { set; get; } = 5f;
+    [field: SerializeField] public float RunSpeed { set; get; } = 10f;
 
     [field: SerializeField] public float JumpForce { set; get; } = 7f;
     [field: SerializeField] public float MouseSensitivity { set; get; } = 100f;
@@ -22,8 +22,7 @@ public class PlayerMovement : MonoBehaviour
     // [field: SerializeField] public float ShootRecoil { set; get; } = 5.0f; // Source [4]
 
     [Header("References")]
-    [field: SerializeField]
-    public Transform PlayerCamera { set; get; }
+    [field: SerializeField] public Transform PlayerCamera { set; get; }
 
     // [field: SerializeField] public Transform GunEnd { set; get; } = null!; // Source [5]
     [field: SerializeField] private Rigidbody Rigidbody { set; get; }
@@ -31,8 +30,8 @@ public class PlayerMovement : MonoBehaviour
     // [field: SerializeField] public AudioClip ShootSound { set; get; } = null!; // Source [6]
 
     [Header("Input Actions")]
-    [field: SerializeField]
-    public InputActionReference MoveAction { set; get; } = null!;
+    [field: SerializeField] public InputActionReference MoveAction { set; get; } = null!;
+    [field: SerializeField] public InputActionReference RunAction { set; get; } = null!;
 
     [field: SerializeField] public InputActionReference LookAction { set; get; }
     [field: SerializeField] public InputActionReference JumpAction { set; get; }
@@ -48,41 +47,46 @@ public class PlayerMovement : MonoBehaviour
         Animator = GetComponentInChildren<Animator>();
         audioSource = gameObject.AddComponent<AudioSource>(); // 사운드 소스 자동 추가
 
-            // 🌟 [핵심 해결책] 조작 키 스위치 켜기 (Enable)
-        // 이 코드가 있어야만 유니티가 키보드/마우스 입력을 받아들이기 시작합니다!
+        // Only with this code will Unity start accepting keyboard/mouse inputs!
         if (MoveAction != null) MoveAction.action.Enable();
         if (LookAction != null) LookAction.action.Enable();
         if (JumpAction != null) JumpAction.action.Enable();
-
-        // 이벤트 연결
+        if (RunAction != null) RunAction.action.Enable();
+        // Event connect
         if (JumpAction != null) JumpAction.action.performed += OnJump;
         
         Cursor.lockState = CursorLockMode.Locked;
 
-        // 이벤트 연결
+        // Event connect
         JumpAction.action.performed += OnJump;
         // FireAction.action.performed += OnFire; // 사격 버튼 이벤트
     }
     
     private void Update()
     {
-        CheckGround();      // 땅에 닿아있는지 확인
+        CheckGround();      // Make sure it's on the ground
         LookAround();       // 마우스로 시점 회전
-        Move();             // WASD 이동 (아래에 만든 함수 실행)
-        UpdateAnimation();  // 걷는 애니메이션 재생
+        Move();             // Move WASD (Run the function you created below)
+        UpdateAnimation();  // Playing walking animation
     }
     private void Move()
     {
         var moveInput = MoveAction.action.ReadValue<Vector2>();
+        bool isRunning = RunAction != null && RunAction.action.IsPressed();
+    
+        // calculate the running speed here
+        float currentTargetSpeed = isRunning ? RunSpeed : MoveSpeed;
+    
         var moveX = moveInput.x;
         var moveZ = moveInput.y;
 
         var move = transform.right * moveX + transform.forward * moveZ;
-        var velocity = move * MoveSpeed;
+        // you should multiply currentTargetSpeed!
+        var velocity = move * currentTargetSpeed; 
+
         velocity.y = Rigidbody.linearVelocity.y;
         Rigidbody.linearVelocity = velocity;
     }
-
     private void OnJump(InputAction.CallbackContext context)
     {
         if (IsGrounded)
@@ -91,46 +95,7 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 
-    // // --- 사격 및 피드백 로직 (Source [1, 4, 7-9] 통합) ---
-    // private void OnFire(InputAction.CallbackContext context)
-    // {
-    //     if (Time.time >= NextFireTime)
-    //     {
-    //         NextFireTime = Time.time + FireRate;
-    //         Shoot();
-    //     }
-    // }
-    //
-    // private void Shoot()
-    // {
-    //     // 1. 사운드 재생 [Source 522, 583]
-    //     if (ShootSound != null) audioSource.PlayOneShot(ShootSound);
-    //
-    //     // 2. 레이캐스트 발사 [Source 505, 532-533]
-    //     Vector3 rayOrigin = PlayerCamera.position;
-    //     if (Physics.Raycast(rayOrigin, PlayerCamera.forward, out RaycastHit hit, WeaponRange))
-    //     {
-    //         Debug.Log("Hit: " + hit.collider.name); // Source [8]
-    //
-    //         // 적에게 데미지 전달 [Source 549]
-    //         // hit.collider.GetComponent<ShootableBox>()?.Damage(GunDamage);
-    //
-    //         // 물리적인 힘 가하기 [Source 550]
-    //         hit.rigidbody?.AddForce(-hit.normal * HitForce);
-    //     }
-    //
-    //     // 3. 총기 반동 및 카메라 흔들림 [Source 576, 579]
-    //     ApplyRecoil();
-    //     StartCoroutine(CameraShake(0.1f, 0.05f));
-    // }
-    //
-    // private void ApplyRecoil() // 발사 시 카메라가 위로 튀는 효과 [Source 576]
-    // {
-    //     XRotation -= ShootRecoil * 0.1f;
-    //     PlayerCamera.localRotation = Quaternion.Euler(XRotation, 0f, 0f);
-    // }
-
-    private IEnumerator CameraShake(float duration, float intensity) // 화면 흔들림 [Source 579]
+    private IEnumerator CameraShake(float duration, float intensity)
     {
         Vector3 originalPos = PlayerCamera.localPosition;
         float elapsed = 0f;
@@ -146,14 +111,41 @@ public class PlayerMovement : MonoBehaviour
         PlayerCamera.localPosition = originalPos;
     }
 
-    // --- 유틸리티 및 애니메이션 ---
-    private void UpdateAnimation() // 이전 대화에서 설정한 isWalking 제어
+    private void UpdateAnimation()
     {
         var moveInput = MoveAction.action.ReadValue<Vector2>();
-        bool isMoving = moveInput.magnitude > 0.1f;
-        if (Animator != null) Animator.SetBool("isWalking", isMoving);
-    }
+        bool isPressed = RunAction != null && RunAction.action.IsPressed();
+    
+        // 조이스틱이나 키보드의 미세한 입력을 무시하기 위해 0.15f 정도로 설정합니다.
+        float inputMagnitude = moveInput.magnitude;
+        bool hasInput = inputMagnitude > 0.15f; 
 
+        if (Animator != null)
+        {
+            // Performs a move decision only when there is input.
+            // When running, clearly make isWalking false to prevent collisions.
+            bool isRunning = hasInput && isPressed;
+            bool isWalking = hasInput && !isPressed; 
+
+            // Update animator parameters
+            Animator.SetBool("isRunning", isRunning);
+            Animator.SetBool("isWalking", isWalking);
+
+            // Modify Speed value
+            if (hasInput)
+            {
+                float targetValue = isRunning ? 1.0f : 0.5f;
+                Animator.SetFloat("Speed", targetValue, 0.05f, Time.deltaTime);
+            }
+            else
+            {
+                // If there is no input, initialize all movement-related variables immediately.
+                Animator.SetBool("isRunning", false);
+                Animator.SetBool("isWalking", false);
+                Animator.SetFloat("Speed", 0f);
+            }
+        }
+    }
     private void CheckGround()
     {
         IsGrounded = Physics.Raycast(transform.position, Vector3.down, 1.1f, GroundLayer);
