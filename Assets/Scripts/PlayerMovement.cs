@@ -35,8 +35,16 @@ public class PlayerMovement : MonoBehaviour
 
     [field: SerializeField] public InputActionReference LookAction { set; get; }
     [field: SerializeField] public InputActionReference JumpAction { set; get; }
+    [field: SerializeField] public InputActionReference CrouchAction { set; get; }
     // [field: SerializeField] public InputActionReference FireAction { set; get; }
-
+    [Header("Advanced Movement")]
+    [SerializeField] private float crouchSpeed = 2.5f;
+    [SerializeField] private float crouchHeight = 1.0f; // 웅크렸을 때 높이
+    [SerializeField] private float slideForce = 15f;    // 슬라이딩 힘
+    [SerializeField] private float diveForce = 10f;
+    
+    private float originalHeight;
+    private bool isCrouching;
     private float XRotation = 0f;
     private bool IsGrounded;
     private float NextFireTime;
@@ -54,11 +62,11 @@ public class PlayerMovement : MonoBehaviour
         if (RunAction != null) RunAction.action.Enable();
         // Event connect
         if (JumpAction != null) JumpAction.action.performed += OnJump;
-        
+        if( CrouchAction != null) CrouchAction.action.performed += OnCrouch;
         Cursor.lockState = CursorLockMode.Locked;
 
         // Event connect
-        JumpAction.action.performed += OnJump;
+        // JumpAction.action.performed += OnJump;
         // FireAction.action.performed += OnFire; // 사격 버튼 이벤트
     }
     
@@ -67,7 +75,7 @@ public class PlayerMovement : MonoBehaviour
         CheckGround();      // Make sure it's on the ground
         LookAround();       // 마우스로 시점 회전
         Move();             // Move WASD (Run the function you created below)
-        UpdateAnimation();  // Playing walking animation
+        UpdateAnimation();
     }
     private void Move()
     {
@@ -83,6 +91,10 @@ public class PlayerMovement : MonoBehaviour
         var move = transform.right * moveX + transform.forward * moveZ;
         // you should multiply currentTargetSpeed!
         var velocity = move * currentTargetSpeed; 
+        if (isCrouching)
+        {
+            velocity /= 2;
+        }
 
         velocity.y = Rigidbody.linearVelocity.y;
         Rigidbody.linearVelocity = velocity;
@@ -110,11 +122,48 @@ public class PlayerMovement : MonoBehaviour
 
         PlayerCamera.localPosition = originalPos;
     }
+    
+    private void OnCrouch(InputAction.CallbackContext context)
+    {
+        if (context.performed) StartCrouch();
+        else if (context.canceled) StopCrouch();
+    }
+
+    private void StartCrouch()
+    {
+        isCrouching = true;
+        // 캡슐 콜라이더 높이 조절 (소스 [3]의 캡슐 히트박스 원리 응용)
+        var collider = GetComponent<CapsuleCollider>();
+        originalHeight = collider.height;
+        collider.height = crouchHeight;
+    
+        // 슬라이딩 체크: 달리는 중 웅크리면 슬라이딩 발동 [375 참고]
+        if (Rigidbody.linearVelocity.magnitude > MoveSpeed + 1f && IsGrounded)
+        {
+            StartSliding();
+        }
+    }
+
+    private void StopCrouch()
+    {
+        isCrouching = false;
+        GetComponent<CapsuleCollider>().height = originalHeight;
+    }
+    
+    private void StartSliding()
+    {
+        // 이동 방향으로 강한 힘을 가함 (Impulse 모드 사용) [45, 506 참고]
+        Vector3 slideDir = transform.forward;
+        Rigidbody.AddForce(slideDir * slideForce, ForceMode.Impulse);
+    
+        // 슬라이딩 중 마찰력을 줄이기 위해 잠시 물리 재질을 변경하거나 가속도를 유지할 수 있습니다.
+    }
 
     private void UpdateAnimation()
     {
         var moveInput = MoveAction.action.ReadValue<Vector2>();
         bool isPressed = RunAction != null && RunAction.action.IsPressed();
+        // bool isJumped = JumpAction != null && JumpAction.action.IsPressed();
     
         // 조이스틱이나 키보드의 미세한 입력을 무시하기 위해 0.15f 정도로 설정합니다.
         float inputMagnitude = moveInput.magnitude;
@@ -126,8 +175,10 @@ public class PlayerMovement : MonoBehaviour
             // When running, clearly make isWalking false to prevent collisions.
             bool isRunning = hasInput && isPressed;
             bool isWalking = hasInput && !isPressed; 
+            bool isJumping = !IsGrounded; 
 
             // Update animator parameters
+            Animator.SetBool("isJumping", isJumping);
             Animator.SetBool("isRunning", isRunning);
             Animator.SetBool("isWalking", isWalking);
 
@@ -148,11 +199,15 @@ public class PlayerMovement : MonoBehaviour
     }
     private void CheckGround()
     {
-        IsGrounded = Physics.Raycast(transform.position, Vector3.down, 1.1f, GroundLayer);
+        IsGrounded = Physics.Raycast(transform.position, Vector3.down, 0.5f, GroundLayer);
     }
+
+    public bool canLook = true; 
 
     private void LookAround()
     {
+        if (!canLook) return; 
+
         var mouseInput = LookAction.action.ReadValue<Vector2>();
         float mouseX = mouseInput.x * MouseSensitivity * Time.deltaTime;
         float mouseY = mouseInput.y * MouseSensitivity * Time.deltaTime;

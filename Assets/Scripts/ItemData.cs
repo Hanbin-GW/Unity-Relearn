@@ -4,7 +4,10 @@ using UnityEngine;
 public enum ItemType {
     Resource,
     Equipable,
-    Consumable
+    Consumable,
+    Weapon,
+    Ammo,
+    SpecialWeapon
 }
 
 // 소모품의 효과 타입을 정의 [4]
