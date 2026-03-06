@@ -66,6 +66,10 @@ public class UIInventory : MonoBehaviour
     public void Toggle()
     {
         inventoryWindow.SetActive(!inventoryWindow.activeInHierarchy);
+        dropButton.SetActive(!dropButton.activeInHierarchy);
+        equipButton.SetActive(!equipButton.activeInHierarchy);
+        unEquipButton.SetActive(!unEquipButton.activeInHierarchy);
+        useButton.SetActive(!useButton.activeInHierarchy);
 
         // 플레이어 오브젝트를 태그로 찾아 스크립트를 가져옵니다.
         PlayerMovement player = GameObject.FindWithTag("Player")?.GetComponent<PlayerMovement>();
