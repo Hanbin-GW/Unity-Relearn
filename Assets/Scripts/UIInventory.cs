@@ -65,28 +65,33 @@ public class UIInventory : MonoBehaviour
 
     public void Toggle()
     {
-        inventoryWindow.SetActive(!inventoryWindow.activeInHierarchy);
-        dropButton.SetActive(!dropButton.activeInHierarchy);
-        equipButton.SetActive(!equipButton.activeInHierarchy);
-        unEquipButton.SetActive(!unEquipButton.activeInHierarchy);
-        useButton.SetActive(!useButton.activeInHierarchy);
+        // 1. 인벤토리 창만 토글합니다.
+        bool isOpen = !inventoryWindow.activeSelf;
+        inventoryWindow.SetActive(isOpen);
 
-        // 플레이어 오브젝트를 태그로 찾아 스크립트를 가져옵니다.
+        // 2. 창을 닫을 때 버튼들을 초기화하거나 정보창을 비웁니다.
+        if (!isOpen)
+        {
+            ClearSelectedItemWindow(); // 소스 [2] 참고: 선택창 비우기 함수 호출
+        }
+
+        // 플레이어 제어 로직
         PlayerMovement player = GameObject.FindWithTag("Player")?.GetComponent<PlayerMovement>();
 
-        if (inventoryWindow.activeInHierarchy)
+        if (isOpen)
         {
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
-            if (player != null) player.canLook = false; // 시선 회전 금지
+            if (player != null) player.canLook = false;
         }
         else
         {
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
-            if (player != null) player.canLook = true;  // 시선 회전 허용
+            if (player != null) player.canLook = true;
         }
     }
+
     
     public void AddItem(ItemData data)
     {
