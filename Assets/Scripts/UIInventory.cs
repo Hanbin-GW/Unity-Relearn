@@ -11,6 +11,10 @@ public class UIInventory : MonoBehaviour
     [Header("Selected Item Info")]    
     private ItemSlot selectedItem;
     // --- 필요 없는 텍스트 변수들을 완전히 제거했습니다 ---
+    public TextMeshProUGUI selectedItemName;        // 아이템 이름 텍스트
+    public TextMeshProUGUI selectedItemDescription; // 아이템 설명 텍스트
+    public TextMeshProUGUI selectedItemStatName;    // 스탯 종류 이름 (예: 체력)
+    public TextMeshProUGUI selectedItemStatValue;   // 스탯 수치 (예: 20)
     public GameObject equipButton;
     public GameObject useButton;
     public GameObject dropButton;
@@ -68,6 +72,7 @@ public class UIInventory : MonoBehaviour
         // 1. 인벤토리 창만 토글합니다.
         bool isOpen = !inventoryWindow.activeSelf;
         inventoryWindow.SetActive(isOpen);
+        
 
         // 2. 창을 닫을 때 버튼들을 초기화하거나 정보창을 비웁니다.
         if (!isOpen)
@@ -151,23 +156,36 @@ public class UIInventory : MonoBehaviour
     
     public void SelectItem(int index)
     {
-        selectedItemIndex = index;
+        // 1. 해당 슬롯에 아이템이 없으면 아무것도 하지 않음
+        if (slots[index].item == null) return;
 
-        // 해당 슬롯에 아이템이 있는지 확인
-        if (slots[index].item != null)
+        selectedItemIndex = index;
+        ItemData data = slots[index].item;
+
+        // 2. 이름 및 설명 텍스트 업데이트 [1]
+        selectedItemName.text = data.displayName;
+        selectedItemDescription.text = data.description;
+
+        // 3. 아이템 능력치(Stat) 정보 표시 [2]
+        selectedItemStatName.text = string.Empty;
+        selectedItemStatValue.text = string.Empty;
+        for (int i = 0; i < data.consumables.Length; i++)
         {
-            // 아이템이 있다면 버튼들을 활성화
-            useButton.SetActive(true);
-            dropButton.SetActive(true);
-        
-            // 장착 가능한 아이템인지에 따라 장착 버튼 활성화 (선택 사항)
-            if (equipButton != null) equipButton.SetActive(true);
+            selectedItemStatName.text += data.consumables[i].type.ToString() + "\n";
+            selectedItemStatValue.text += data.consumables[i].value.ToString() + "\n";
         }
-        else
-        {
-            // 아이템이 없는 빈 슬롯이라면 버튼들을 숨김
-            ClearSelectedItemWindow();
-        }
+
+        // 4. 아이템 타입에 따른 버튼 활성화 설정 [2]
+        // 소모품일 때만 사용 버튼 표시
+        useButton.SetActive(data.type == ItemType.Consumable);
+    
+        // 장비 아이템인 경우 장착 여부에 따라 장착/해제 버튼 교체 표시
+        bool isEquipable = data.type == ItemType.Equipable;
+        equipButton.SetActive(isEquipable && !slots[index].equipped);
+        unEquipButton.SetActive(isEquipable && slots[index].equipped);
+    
+        // 버리기 버튼은 아이템이 있다면 항상 표시
+        dropButton.SetActive(true);
     }
 
     public void ClearSelectedItemWindow()
