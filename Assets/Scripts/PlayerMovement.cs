@@ -38,6 +38,9 @@ public class PlayerMovement : MonoBehaviour
     [field: SerializeField] public InputActionReference CrouchAction { set; get; }
     // [field: SerializeField] public InputActionReference FireAction { set; get; }
     [Header("Advanced Movement")]
+    private bool isSliding;
+    private float slideTimer;
+    [SerializeField] private float slideDuration = 0.6f;
     [SerializeField] private float crouchSpeed = 2.5f;
     [SerializeField] private float crouchHeight = 1.0f; // 웅크렸을 때 높이
     [SerializeField] private float slideForce = 15f;    // 슬라이딩 힘
@@ -49,6 +52,28 @@ public class PlayerMovement : MonoBehaviour
     private bool IsGrounded;
     private float NextFireTime;
     private AudioSource audioSource;
+    private CapsuleCollider capsule;
+    private Vector3 originalCenter;
+    [SerializeField] Transform visualRoot;
+    private Vector3 visualOriginalLocalPos;
+    [SerializeField] private float crouchVisualOffsetY = -0.45f;
+    [SerializeField] private float slideVisualOffsetY = -0.55f;    
+    private void Awake()
+    {
+        capsule = GetComponent<CapsuleCollider>();
+        Rigidbody = GetComponent<Rigidbody>();
+        Animator = GetComponentInChildren<Animator>();
+
+        originalHeight = capsule.height;
+        originalCenter = capsule.center;
+
+        if (visualRoot == null && Animator != null)
+            visualRoot = Animator.transform;
+
+        if (visualRoot != null)
+            visualOriginalLocalPos = visualRoot.localPosition;
+    }
+    
     private void OnEnable()
     {
         Rigidbody = GetComponent<Rigidbody>();
@@ -62,12 +87,39 @@ public class PlayerMovement : MonoBehaviour
         if (RunAction != null) RunAction.action.Enable();
         // Event connect
         if (JumpAction != null) JumpAction.action.performed += OnJump;
-        if( CrouchAction != null) CrouchAction.action.performed += OnCrouch;
+        if (CrouchAction != null)
+        {
+            CrouchAction.action.Enable();
+            CrouchAction.action.performed += OnCrouchStarted;
+            CrouchAction.action.canceled += OnCrouchCanceled;
+        }
         Cursor.lockState = CursorLockMode.Locked;
 
         // Event connect
         // JumpAction.action.performed += OnJump;
         // FireAction.action.performed += OnFire; // 사격 버튼 이벤트
+    }
+    
+    private void OnDisable()
+    {
+        if (CrouchAction != null)
+        {
+            CrouchAction.action.performed -= OnCrouchStarted;
+            CrouchAction.action.canceled -= OnCrouchCanceled;
+            CrouchAction.action.Disable();
+            if (JumpAction != null)
+                JumpAction.action.performed -= OnJump;
+        }
+    }
+    
+    private void OnCrouchStarted(InputAction.CallbackContext context)
+    {
+        StartCrouch();
+    }
+
+    private void OnCrouchCanceled(InputAction.CallbackContext context)
+    {
+        StopCrouch();
     }
     
     private void Update()
@@ -79,34 +131,48 @@ public class PlayerMovement : MonoBehaviour
     }
     private void Move()
     {
+        if (isSliding)
+        {
+            slideTimer -= Time.deltaTime;
+            if (slideTimer <= 0f)
+            {
+                isSliding = false;
+
+                capsule.height = originalHeight;
+                capsule.center = originalCenter;
+
+                if (visualRoot != null)
+                    visualRoot.localPosition = visualOriginalLocalPos;
+            }
+            return;
+        }
+
         var moveInput = MoveAction.action.ReadValue<Vector2>();
         bool isRunning = RunAction != null && RunAction.action.IsPressed();
-    
-        // calculate the running speed here
         float currentTargetSpeed = isRunning ? RunSpeed : MoveSpeed;
-    
-        var moveX = moveInput.x;
-        var moveZ = moveInput.y;
 
-        var move = transform.right * moveX + transform.forward * moveZ;
-        // you should multiply currentTargetSpeed!
-        var velocity = move * currentTargetSpeed; 
+        var move = transform.right * moveInput.x + transform.forward * moveInput.y;
+        var velocity = move * currentTargetSpeed;
+
         if (isCrouching)
-        {
-            velocity /= 2;
-        }
+            velocity /= 2f;
 
         velocity.y = Rigidbody.linearVelocity.y;
         Rigidbody.linearVelocity = velocity;
     }
+    
     private void OnJump(InputAction.CallbackContext context)
     {
         if (IsGrounded)
         {
-            Rigidbody.linearVelocity = new Vector3(Rigidbody.linearVelocity.x, JumpForce, Rigidbody.linearVelocity.z);
+            IsGrounded = false;
+            Rigidbody.linearVelocity = new Vector3(
+                Rigidbody.linearVelocity.x,
+                JumpForce,
+                Rigidbody.linearVelocity.z
+            );
         }
     }
-
     private IEnumerator CameraShake(float duration, float intensity)
     {
         Vector3 originalPos = PlayerCamera.localPosition;
@@ -123,66 +189,79 @@ public class PlayerMovement : MonoBehaviour
         PlayerCamera.localPosition = originalPos;
     }
     
-    private void OnCrouch(InputAction.CallbackContext context)
-    {
-        if (context.performed) StartCrouch();
-        else if (context.canceled) StopCrouch();
-    }
-
     private void StartCrouch()
     {
-        isCrouching = true;
-        // 캡슐 콜라이더 높이 조절 (소스 [3]의 캡슐 히트박스 원리 응용)
-        var collider = GetComponent<CapsuleCollider>();
-        originalHeight = collider.height;
-        collider.height = crouchHeight;
-    
-        // 슬라이딩 체크: 달리는 중 웅크리면 슬라이딩 발동 [375 참고]
-        if (Rigidbody.linearVelocity.magnitude > MoveSpeed + 1f && IsGrounded)
+        bool canSlide = IsGrounded &&
+                        (RunAction != null && RunAction.action.IsPressed()) &&
+                        Rigidbody.linearVelocity.magnitude > MoveSpeed + 1f;
+
+        if (canSlide)
         {
             StartSliding();
+            return;
         }
+
+        isCrouching = true;
+
+        capsule.height = crouchHeight;
+        capsule.center = new Vector3(originalCenter.x, crouchHeight * 0.5f, originalCenter.z);
+
+        if (visualRoot != null)
+            visualRoot.localPosition = visualOriginalLocalPos + new Vector3(0f, crouchVisualOffsetY, 0f);
     }
 
     private void StopCrouch()
     {
+        if (isSliding) return;
+
         isCrouching = false;
-        GetComponent<CapsuleCollider>().height = originalHeight;
+
+        capsule.height = originalHeight;
+        capsule.center = originalCenter;
+
+        if (visualRoot != null)
+            visualRoot.localPosition = visualOriginalLocalPos;
     }
     
     private void StartSliding()
     {
-        // 이동 방향으로 강한 힘을 가함 (Impulse 모드 사용) [45, 506 참고]
-        Vector3 slideDir = transform.forward;
-        Rigidbody.AddForce(slideDir * slideForce, ForceMode.Impulse);
-    
-        // 슬라이딩 중 마찰력을 줄이기 위해 잠시 물리 재질을 변경하거나 가속도를 유지할 수 있습니다.
-    }
+        isSliding = true;
+        isCrouching = false;
+        slideTimer = slideDuration;
 
+        capsule.height = crouchHeight;
+        capsule.center = new Vector3(originalCenter.x, crouchHeight * 0.5f, originalCenter.z);
+        if (visualRoot != null)
+            visualRoot.localPosition = visualOriginalLocalPos + new Vector3(0f, slideVisualOffsetY, 0f);
+        Vector3 slideDir = transform.forward;
+        Vector3 vel = Rigidbody.linearVelocity;
+        vel.x = slideDir.x * slideForce;
+        vel.z = slideDir.z * slideForce;
+        Rigidbody.linearVelocity = vel;
+    }
     private void UpdateAnimation()
     {
         var moveInput = MoveAction.action.ReadValue<Vector2>();
         bool isPressed = RunAction != null && RunAction.action.IsPressed();
-        // bool isJumped = JumpAction != null && JumpAction.action.IsPressed();
-    
-        // 조이스틱이나 키보드의 미세한 입력을 무시하기 위해 0.15f 정도로 설정합니다.
+
         float inputMagnitude = moveInput.magnitude;
-        bool hasInput = inputMagnitude > 0.15f; 
+        bool hasInput = inputMagnitude > 0.15f;
 
         if (Animator != null)
         {
-            // Performs a move decision only when there is input.
-            // When running, clearly make isWalking false to prevent collisions.
-            bool isRunning = hasInput && isPressed;
-            bool isWalking = hasInput && !isPressed; 
-            bool isJumping = !IsGrounded; 
+            bool isRunning = hasInput && isPressed && !isCrouching && IsGrounded;
+            bool isWalking = hasInput && !isPressed && !isCrouching && IsGrounded;
+            bool isJumping = !IsGrounded;
+           // bool isJumping = !IsGrounded && Rigidbody.linearVelocity.y > 0.1f;
+           // bool isFalling = !IsGrounded && Rigidbody.linearVelocity.y < -0.1f;
 
-            // Update animator parameters
             Animator.SetBool("isJumping", isJumping);
+            // Animator.SetBool("isFalling", isFalling); // 파라미터 있으면 사용
             Animator.SetBool("isRunning", isRunning);
             Animator.SetBool("isWalking", isWalking);
+            Animator.SetBool("isCrouch", isCrouching && !isSliding);
+            Animator.SetBool("isSliding", isSliding);
 
-            // Modify Speed value
             if (hasInput)
             {
                 float targetValue = isRunning ? 1.0f : 0.5f;
@@ -190,7 +269,6 @@ public class PlayerMovement : MonoBehaviour
             }
             else
             {
-                // If there is no input, initialize all movement-related variables immediately.
                 Animator.SetBool("isRunning", false);
                 Animator.SetBool("isWalking", false);
                 Animator.SetFloat("Speed", 0f);
@@ -199,9 +277,13 @@ public class PlayerMovement : MonoBehaviour
     }
     private void CheckGround()
     {
-        IsGrounded = Physics.Raycast(transform.position, Vector3.down, 0.5f, GroundLayer);
-    }
+        CapsuleCollider col = GetComponent<CapsuleCollider>();
 
+        Vector3 origin = transform.position + col.center;
+        float rayDistance = (col.height * 0.5f) + 0.15f;
+
+        IsGrounded = Physics.Raycast(origin, Vector3.down, rayDistance, GroundLayer);
+    }
     public bool canLook = true; 
 
     private void LookAround()

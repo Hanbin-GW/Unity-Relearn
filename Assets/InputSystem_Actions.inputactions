@@ -95,15 +95,6 @@
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": true
-                },
-                {
-                    "name": "sliding",
-                    "type": "Button",
-                    "id": "34c49a30-4d37-4259-be96-9fb41f6a57b5",
-                    "expectedControlType": "",
-                    "processors": "",
-                    "interactions": "",
-                    "initialStateCheck": true
                 }
             ],
             "bindings": [
@@ -500,17 +491,6 @@
                     "processors": "",
                     "groups": ";Keyboard&Mouse",
                     "action": "Inventory",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "18929cd6-ff18-47fb-8ef6-a84e27086ecd",
-                    "path": "<Keyboard>/b",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": ";Touch",
-                    "action": "sliding",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }
