@@ -23,6 +23,8 @@ public class PlayerMovement : MonoBehaviour
 
     [Header("References")]
     [field: SerializeField] public Transform PlayerCamera { set; get; }
+    [SerializeField] Camera fpsCamera;
+    [SerializeField] Camera debugCamera;
 
     // [field: SerializeField] public Transform GunEnd { set; get; } = null!; // Source [5]
     [field: SerializeField] private Rigidbody Rigidbody { set; get; }
@@ -36,6 +38,7 @@ public class PlayerMovement : MonoBehaviour
     [field: SerializeField] public InputActionReference LookAction { set; get; }
     [field: SerializeField] public InputActionReference JumpAction { set; get; }
     [field: SerializeField] public InputActionReference CrouchAction { set; get; }
+    [field: SerializeField] public InputActionReference DebugAction { get; set; }
     // [field: SerializeField] public InputActionReference FireAction { set; get; }
     [Header("Advanced Movement")]
     private bool isSliding;
@@ -57,7 +60,14 @@ public class PlayerMovement : MonoBehaviour
     [SerializeField] Transform visualRoot;
     private Vector3 visualOriginalLocalPos;
     [SerializeField] private float crouchVisualOffsetY = -0.45f;
-    [SerializeField] private float slideVisualOffsetY = -0.55f;    
+    [SerializeField] private float slideVisualOffsetY = -0.55f;   
+    
+    [Header("Camera Tracking")]
+    private Vector3 cameraOriginalLocalPos;
+    [SerializeField] private float crouchCameraOffsetY = -0.25f;
+    [SerializeField] private float slideCameraOffsetY = -0.4f;
+    [SerializeField] private float cameraLerpSpeed = 12f;
+    
     private void Awake()
     {
         capsule = GetComponent<CapsuleCollider>();
@@ -72,6 +82,9 @@ public class PlayerMovement : MonoBehaviour
 
         if (visualRoot != null)
             visualOriginalLocalPos = visualRoot.localPosition;
+        
+        if (PlayerCamera != null)
+            cameraOriginalLocalPos = PlayerCamera.localPosition;
     }
     
     private void OnEnable()
@@ -93,6 +106,13 @@ public class PlayerMovement : MonoBehaviour
             CrouchAction.action.performed += OnCrouchStarted;
             CrouchAction.action.canceled += OnCrouchCanceled;
         }
+        
+        if (DebugAction != null)
+        {
+            DebugAction.action.Enable();
+            DebugAction.action.performed += OnDebugCamera;
+        }
+        
         Cursor.lockState = CursorLockMode.Locked;
 
         // Event connect
@@ -111,7 +131,11 @@ public class PlayerMovement : MonoBehaviour
                 JumpAction.action.performed -= OnJump;
         }
     }
-    
+    private void OnDebugCamera(InputAction.CallbackContext ctx)
+    {
+        fpsCamera.enabled = !fpsCamera.enabled;
+        debugCamera.enabled = !debugCamera.enabled;
+    }
     private void OnCrouchStarted(InputAction.CallbackContext context)
     {
         StartCrouch();
@@ -128,6 +152,7 @@ public class PlayerMovement : MonoBehaviour
         LookAround();       // 마우스로 시점 회전
         Move();             // Move WASD (Run the function you created below)
         UpdateAnimation();
+        UpdateCameraHeight();
     }
     private void Move()
     {
@@ -299,5 +324,23 @@ public class PlayerMovement : MonoBehaviour
 
         PlayerCamera.localRotation = Quaternion.Euler(XRotation, 0f, 0f);
         transform.Rotate(Vector3.up * mouseX);
+    }
+    
+    private void UpdateCameraHeight()
+    {
+        if (PlayerCamera == null) return;
+
+        Vector3 targetPos = cameraOriginalLocalPos;
+
+        if (isSliding)
+            targetPos += new Vector3(0f, slideCameraOffsetY, 0f);
+        else if (isCrouching)
+            targetPos += new Vector3(0f, crouchCameraOffsetY, 0f);
+
+        PlayerCamera.localPosition = Vector3.Lerp(
+            PlayerCamera.localPosition,
+            targetPos,
+            Time.deltaTime * cameraLerpSpeed
+        );
     }
 }
